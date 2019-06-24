@@ -272,7 +272,6 @@ static void createJoin(Iterator* left,
         else createHashJoin(left, right, leftIndex, container, join, last);
     }
 }
-
 static uint64_t getJoinRange(const JoinPredicate& predicate)
 {
     auto left = predicate.selections[0];
@@ -290,6 +289,65 @@ static uint64_t getJoinRange(const JoinPredicate& predicate)
     return end - start;
 }
 
+static uint32_t estimateJoinSize(Database& database, Query& query,
+                                std::unordered_map<uint32_t,Iterator*>& views,
+                                uint32_t prevJoins, uint32_t prevSize,
+                                uint32_t nextJoin)
+{
+    int joinNum = query.joins.size();
+    auto left = query.joins[nextJoin][0].selections[0];
+    auto right = query.joins[nextJoin][0].selections[1];
+    auto leftBinding = left.binding;
+    auto rightBinding = right.binding;
+    bool usedLeftBinding  = false;
+    bool usedRightBinding = false;
+    for (int i = 0;i < joinNum; i++)
+        if(((1<<i) & prevJoins) > 0)
+        {
+            auto binding1 = query.joins[i][0].selections[0].binding;
+            auto binding2 = query.joins[i][0].selections[1].binding;
+            if (binding1 == leftBinding || binding2 == leftBinding)
+                usedLeftBinding = true;
+            if (binding1 == rightBinding || binding2 == rightBinding)
+                usedRightBinding = true;
+        }
+    
+    auto& leftView = views[leftBinding];
+    auto& rightView = views[rightBinding];
+    auto leftMin = database.getMinValue(left.relation,left.column);
+    auto leftMax = database.getMaxValue(left.relation,left.column) + 1;
+    auto rightMin = database.getMinValue(right.relation,right.column);
+    auto rightMax = database.getMaxValue(right.relation,right.column) + 1;
+    auto start = std::max(leftMin, rightMin);
+    auto end = std::min(leftMax, rightMax);
+    if (end <= start)
+        return 0;
+    
+    if (!usedLeftBinding && !usedRightBinding)
+    {
+        auto curSize = leftView->predictSize() * rightView->predictSize() 
+                        /(leftMax - leftMin) / (rightMax - rightMin) * (end-start); 
+        auto estimateSize = prevSize * curSize;
+        return estimateSize;
+    }
+    else if (usedLeftBinding &&  !usedRightBinding)
+    {
+        auto estimateSize = prevSize * rightView->predictSize() 
+                        /(leftMax - leftMin) / (rightMax - rightMin) * (end-start);
+        return estimateSize;
+    }
+    else if (!usedLeftBinding && usedRightBinding)
+    {
+        auto estimateSize = prevSize * leftView->predictSize()
+                        /(leftMax - leftMin) / (rightMax - rightMin) * (end-start);
+        return estimateSize;
+    }
+    else
+    {
+        auto estimateSize = prevSize / (leftMax - leftMin) / (rightMax - rightMin) * (end-start);
+        return estimateSize;
+    }
+}
 Iterator* Executor::createRootView(Database& database, Query& query,
                                    std::unordered_map<uint32_t, Iterator*>& views,
                                    std::vector<std::unique_ptr<Iterator>>& container,
@@ -326,6 +384,73 @@ Iterator* Executor::createRootView(Database& database, Query& query,
         return (aLeft->predictSize() * aRight->predictSize()) < (bLeft->predictSize() * bRight->predictSize());*/
     });
 #endif
+
+#ifdef SORT_JOINS_BY_DP
+    int n = static_cast<int>(query.joins.size());
+    int m = 1 << n;
+    int * tot_cost = new int[m];
+    int * mid_size = new int[m];
+    int * select = new int[m];
+    for (int i = 0;i < m;i++)
+    {
+        tot_cost[i] = 1e9;
+        mid_size[i] = 1e9;
+    }
+    tot_cost[0] = 0;
+    mid_size[0] = 1;
+    for (int prevJoins = 0;prevJoins < m;prevJoins++)
+        for (int nextJoin = 0;nextJoin < n;nextJoin++)
+            if (((1 << nextJoin) & prevJoins) == 0)
+            {
+                int newJoins = prevJoins | (1 << nextJoin);
+                int estimateSize = estimateJoinSize(database,query,views,
+                                                prevJoins,mid_size[prevJoins],
+                                                nextJoin);
+                if (estimateSize < mid_size[newJoins])
+                      mid_size[newJoins] = estimateSize;
+                if (estimateSize + tot_cost[prevJoins] < tot_cost[newJoins])
+                {
+                    tot_cost[newJoins] = estimateSize + tot_cost[prevJoins];
+                    select[newJoins] = nextJoin;
+                }
+            }
+
+    std::cout << "result for DP:" << std::endl;
+    for (int i = 0;i < m;i ++)
+        std::cout << i << " tot_cost:" <<  tot_cost[i] << " mid_size:" << mid_size[i] << std::endl;
+
+    auto tmpJoins = query.joins;
+    m = (1 << n) - 1;
+    for (int i = n-1;i >= 0;i--)
+    {
+        int curJoin = select[m];
+        query.joins[i] = tmpJoins[curJoin];
+        m = m - (1 << curJoin);
+    }
+            
+#endif
+
+#ifdef CHECK_SIZE
+    for (int i = 0;i < static_cast<int32_t>(query.joins.size());i++)
+    {
+        auto* join = &query.joins[i];
+        auto left = (*join)[0].selections[0];
+        auto right = (*join)[0].selections[1];
+        auto& leftView = views[left.binding];
+        auto& rightView = views[right.binding];
+        auto leftMin = database.getMinValue(left.relation,left.column);
+        auto leftMax = database.getMaxValue(left.relation,left.column);
+        auto rightMin = database.getMinValue(right.relation,right.column);
+        auto rightMax = database.getMaxValue(right.relation,right.column);
+        std::cout << "left(binding,relation,column) : " <<left.binding << " " << left.relation << " " << left.column << std::endl;
+        std::cout << "left predict size: " << leftView->predictSize() << std::endl;
+        std::cout << "left range: "<< leftMin << " - " << leftMax << std::endl;
+        std::cout << "right(binding,relation,column) : " << right.binding << " " << right.relation << " " << right.column << std::endl;
+        std::cout << "right predict size: " << rightView->predictSize() << std::endl;
+        std::cout << "right range: "<< rightMin << " - " << rightMax << std::endl;
+    }
+#endif
+
     auto* join = &query.joins[0];
 
     auto leftBinding = (*join)[0].selections[0].binding;
