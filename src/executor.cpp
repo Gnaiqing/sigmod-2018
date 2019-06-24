@@ -411,12 +411,14 @@ Iterator* Executor::createRootView(Database& database, Query& query,
             select_rate[i] = (double)(end + 1 - start) / (filteredLeftMax + 1 - filteredLeftMin) / (filteredRightMax + 1 - filteredRightMin);
 
     #ifdef CHECK_SIZE
+        /*
         std::cerr << i << ": " << std::endl;
         std::cerr << "left size:" << left_size[i] << std::endl;
         std::cerr << "right size:" << right_size[i] << std::endl;
         std::cerr << "left Range:" << filteredLeftMin << " - " << filteredLeftMax << std::endl;
         std::cerr << "right Range:" << filteredRightMin << " - " << filteredRightMax << std::endl;
         std::cerr << "select rate" << select_rate[i] << std::endl;
+        */
     #endif
     }
 
@@ -447,9 +449,13 @@ Iterator* Executor::createRootView(Database& database, Query& query,
                 }
             }
 
+#ifdef STATISTICS
+    /*
     std::cerr << "result for DP:" << std::endl;
     for (int i = 0;i < m;i ++)
         std::cerr << i << " tot_cost:" <<  tot_cost[i] << " mid_size:" << mid_size[i] << std::endl;
+        */
+#endif
 
     auto tmpJoins = query.joins;
     m = (1 << n) - 1;
@@ -471,6 +477,7 @@ Iterator* Executor::createRootView(Database& database, Query& query,
 #endif
 
 #ifdef CHECK_SIZE
+    /*
     for (int i = 0;i < static_cast<int32_t>(query.joins.size());i++)
     {
         auto* join = &query.joins[i];
@@ -514,6 +521,7 @@ Iterator* Executor::createRootView(Database& database, Query& query,
         std::cerr << "right range: "<< rightMin << " - " << rightMax << std::endl;
         std::cerr << "filtered right range: "<< filteredRightMin << " - " << filteredRightMax << std::endl;
     }
+    */
 #endif
 
     auto* join = &query.joins[0];
