@@ -415,9 +415,13 @@ Iterator* Executor::createRootView(Database& database, Query& query,
                 }
             }
 
-    std::cout << "result for DP:" << std::endl;
+#ifdef STATISTICS
+    /*
+    std::cerr << "result for DP:" << std::endl;
     for (int i = 0;i < m;i ++)
-        std::cout << i << " tot_cost:" <<  tot_cost[i] << " mid_size:" << mid_size[i] << std::endl;
+        std::cerr << i << " tot_cost:" <<  tot_cost[i] << " mid_size:" << mid_size[i] << std::endl;
+        */
+#endif
 
     auto tmpJoins = query.joins;
     m = (1 << n) - 1;
@@ -431,6 +435,7 @@ Iterator* Executor::createRootView(Database& database, Query& query,
 #endif
 
 #ifdef CHECK_SIZE
+    /*
     for (int i = 0;i < static_cast<int32_t>(query.joins.size());i++)
     {
         auto* join = &query.joins[i];
@@ -442,13 +447,14 @@ Iterator* Executor::createRootView(Database& database, Query& query,
         auto leftMax = database.getMaxValue(left.relation,left.column);
         auto rightMin = database.getMinValue(right.relation,right.column);
         auto rightMax = database.getMaxValue(right.relation,right.column);
-        std::cout << "left(binding,relation,column) : " <<left.binding << " " << left.relation << " " << left.column << std::endl;
-        std::cout << "left predict size: " << leftView->predictSize() << std::endl;
-        std::cout << "left range: "<< leftMin << " - " << leftMax << std::endl;
-        std::cout << "right(binding,relation,column) : " << right.binding << " " << right.relation << " " << right.column << std::endl;
-        std::cout << "right predict size: " << rightView->predictSize() << std::endl;
-        std::cout << "right range: "<< rightMin << " - " << rightMax << std::endl;
+        std::cerr << "left(binding,relation,column) : " <<left.binding << " " << left.relation << " " << left.column << std::endl;
+        std::cerr << "left predict size: " << leftView->predictSize() << std::endl;
+        std::cerr << "left range: "<< leftMin << " - " << leftMax << std::endl;
+        std::cerr << "right(binding,relation,column) : " << right.binding << " " << right.relation << " " << right.column << std::endl;
+        std::cerr << "right predict size: " << rightView->predictSize() << std::endl;
+        std::cerr << "right range: "<< rightMin << " - " << rightMax << std::endl;
     }
+    */
 #endif
 
     auto* join = &query.joins[0];
