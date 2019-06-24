@@ -14,6 +14,7 @@
 
 //#define SORT_JOINS_BY_SIZE
 #define SORT_JOINS_BY_DP
+#define GET_ACCURATE_RANGE
 
 //#define USE_HASH_INDEX
 #define USE_SORT_INDEX                  // index of sorted <value, rowid> pairs
@@ -74,7 +75,7 @@
 #define INDEX_THREAD_BAILOUT 1200       // how many milliseconds should the index be precalculated
 
 //#define COLLECT_JOIN_SIZE             // collect sizes of intermediate results
-#define CHECK_SIZE                      // check the size of tables used for join
+//#define CHECK_SIZE                      // check the size of tables used for join
 template <typename K, typename V>
 using HashMap = std::unordered_map<K, V>;
 
